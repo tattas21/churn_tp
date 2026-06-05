@@ -39,3 +39,8 @@ churn_tp/
 ## Skills disponibles
 - `/add-decision` — Agrega decisión documentada a `decisions.md`
 - `/check-checkpoint` — Verifica estado de los checkpoints del TP
+- `/eda-churn` — Guía el análisis exploratorio: distribuciones, hipótesis, correlaciones, outliers
+- `/ml-churn` — Guía el modelado: comparación de modelos, feature engineering, tuning, métricas
+- `/negocio-ecommerce` — Contexto de negocio: RFM, cohortes, impacto económico, recomendaciones de retención
+
+Ver todos los links de referencia en `recursos_github.md`.
