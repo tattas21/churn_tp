@@ -24,12 +24,15 @@ Registro de cada decisión importante del proyecto.
 
 ---
 
-## Decisión — Unificación de categorías en PreferredPaymentMode
+## Decisión — Unificación de categorías inconsistentes
 
-1. **Qué decidí:** Reemplazar 'CC' → 'Credit Card' y 'COD' → 'Cash on Delivery'
-2. **Por qué:** Son claramente la misma categoría escrita de forma distinta. Si no se unifican, el modelo las trata como categorías separadas y aprende patrones incorrectos.
-3. **Alternativas que descarté:** Mantenerlas separadas (causaría ruido en el modelo sin agregar información real)
-4. **Consecuencias:** El campo PreferredPaymentMode queda con 6 valores únicos en lugar de 8.
+1. **Qué decidí:** Unificar la misma categoría escrita de varias formas, en 3 columnas:
+   - `PreferredPaymentMode`: 'CC' → 'Credit Card', 'COD' → 'Cash on Delivery' (7 → 5 valores)
+   - `PreferredLoginDevice`: 'Phone' → 'Mobile Phone' (3 → 2 valores)
+   - `PreferedOrderCat`: 'Mobile' → 'Mobile Phone' (6 → 5 valores)
+2. **Por qué:** Son la misma categoría escrita distinto. Si no se unifican, el modelo las trata como separadas y aprende patrones incorrectos / genera columnas one-hot redundantes.
+3. **Alternativas que descarté:** Mantenerlas separadas (ruido sin información real).
+4. **Consecuencias / dónde vive (sin duplicar el paso):** La limpieza se ejecuta **una sola vez, en el EDA** (`01_EDA_Churn.ipynb`), que detecta los duplicados, llama a `src/preprocessing.clean_categories()` y **guarda el resultado en `data/processed/dataset_limpio.csv`**. La preparación (`02_Preparacion_Datos.ipynb`) **carga ese archivo ya limpio** y no vuelve a limpiar. La lógica vive en `src/preprocessing.py` (definida una vez), el paso se corre una vez (EDA), y la prep consume el output.
 
 ---
 
@@ -48,3 +51,66 @@ Registro de cada decisión importante del proyecto.
 2. **Por qué:** Con solo 17% de churn, un split aleatorio puede desbalancear aún más las proporciones entre train y test. Estratificar garantiza que ambos subsets tengan ~17% de churn. random_state=42 hace el experimento reproducible.
 3. **Alternativas que descarté:** Split aleatorio puro (riesgo de distribuciones distintas)
 4. **Consecuencias:** Los resultados son reproducibles y los subsets son representativos de la distribución real.
+
+---
+
+## Decisión — Orden del pipeline: split ANTES de imputar (evitar leakage)
+
+1. **Qué decidí:** Hacer el split train/test primero, y recién después calcular medianas y percentiles **solo con train**, aplicándolos a test.
+2. **Por qué:** Si imputamos o cap-eamos con estadísticas de todo el dataset, el test "ve" información del train y viceversa (data leakage). El test debe simular datos nunca vistos.
+3. **Alternativas que descarté:** Imputar sobre el dataset completo antes de separar (más simple pero infla las métricas — era lo que hacía la versión vieja del notebook de modelado).
+4. **Consecuencias:** Las medianas/percentiles se guardan como artefactos del train. La lógica reutilizable vive en `src/preprocessing.py` (fit-on-train explícito).
+
+---
+
+## Decisión — Imputación de nulos con mediana
+
+1. **Qué decidí:** Imputar las 7 columnas numéricas con nulos (4.5–5.5% cada una) usando la mediana calculada en train.
+2. **Por qué:** Todas tienen <6% de nulos, así que imputar conserva las filas sin distorsionar. La mediana es robusta a los outliers que detectamos.
+3. **Alternativas que descarté:** Eliminar filas (perderíamos ~25% de la base por acumulación); imputar con la media (sensible a outliers).
+4. **Consecuencias:** 0 nulos en train y test tras la imputación.
+
+---
+
+## Decisión — Cap de outliers al percentil 99 (resuelve la decisión previa)
+
+1. **Qué decidí:** Cap-ear (winsorizar) `Tenure`, `WarehouseToHome` y `NumberOfAddress` al percentil 99 calculado en train, en lugar de eliminar filas.
+2. **Por qué:** Los valores extremos (probables errores de carga) generan ruido en modelos lineales. Cap-ear reduce el ruido sin descartar clientes.
+3. **Alternativas que descarté:** Eliminar filas (pierde clientes); dejarlos (ruido en modelos lineales).
+4. **Consecuencias:** Resuelve la decisión previa de outliers, que quedaba "a evaluar en modelado". Caps en train: Tenure≤30, WarehouseToHome≤35, NumberOfAddress≤11.
+
+---
+
+## Decisión — One-Hot Encoding para categóricas nominales
+
+1. **Qué decidí:** Usar One-Hot Encoding (fit en train, `handle_unknown='ignore'`) para las 5 nominales: PreferredLoginDevice, PreferredPaymentMode, Gender, PreferedOrderCat, MaritalStatus.
+2. **Por qué:** No tienen orden natural. LabelEncoder les impondría un orden falso (ej. Single<Married<Divorced), que los modelos pueden interpretar como una jerarquía inexistente.
+3. **Alternativas que descarté:** LabelEncoder (era lo que usaba el notebook de modelado viejo — incorrecto para nominales).
+4. **Consecuencias:** Pasamos de 19 a 34 features. CityTier y SatisfactionScore se dejan como numéricas porque sí son ordinales.
+
+---
+
+## Decisión — Feature engineering basado en las hipótesis del EDA
+
+1. **Qué decidí:** Crear 4 features row-wise: `CashbackPerOrder`, `CouponPerOrder`, `AppHoursPerDevice`, `IsNewCustomer` (Tenure≤3).
+2. **Por qué:** Derivan de las hipótesis confirmadas (H1 tenure, H5 cashback) y capturan intensidad de uso/engagement que las variables crudas no expresan directamente.
+3. **Alternativas que descarté:** `IsSingle` (redundante con el One-Hot de MaritalStatus).
+4. **Consecuencias:** Validado en el modelado — `IsNewCustomer` quedó como 2ª variable más importante y `CashbackPerOrder` entre las top 5 del Random Forest.
+
+---
+
+## Decisión — Dos versiones de la base (con y sin Complain)
+
+1. **Qué decidí:** Guardar la base procesada en dos versiones (`*_con_complain.csv` y `*_sin_complain.csv`) y dejar un toggle `USAR_COMPLAIN` en el notebook de modelado.
+2. **Por qué:** `Complain` es señal fuerte (quedó 3ª en importancia) pero con riesgo de leakage no confirmado. Tener ambas versiones permite medir cuánto del rendimiento depende de esa variable.
+3. **Alternativas que descarté:** Decidir a ciegas incluirla o excluirla.
+4. **Consecuencias:** El modelado puede comparar métricas con/sin Complain antes de la decisión final.
+
+---
+
+## Decisión — Estructura: preparación separada del modelado
+
+1. **Qué decidí:** Separar la preparación (`02_Preparacion_Datos.ipynb` + `src/preprocessing.py`) del modelado (`03_Modeling_Churn.ipynb`), que ahora consume `data/processed/`.
+2. **Por qué:** La versión anterior mezclaba prep (con leakage) y modelado en un solo notebook. Separar deja la lógica reutilizable, testeable y sin duplicar.
+3. **Alternativas que descarté:** Mantener todo en un notebook de modelado.
+4. **Consecuencias:** El notebook de modelado viejo se renumeró de `02` a `03`.

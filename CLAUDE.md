@@ -14,13 +14,14 @@ Predecir qué clientes de un e-commerce están por irse (churn) antes de que se 
 churn_tp/
 ├── .claude/commands/      # Skills del proyecto
 ├── data/raw/              # CSV original (NO modificar)
-├── data/processed/        # Features procesadas
+├── data/processed/        # dataset_limpio.csv (output del EDA) + train/test (con/sin Complain)
 ├── notebooks/
-│   ├── 01_EDA_Churn.ipynb     # Análisis exploratorio, 5 hipótesis
-│   └── 02_Modeling_Churn.ipynb # Baseline (DT) + Random Forest
+│   ├── 01_EDA_Churn.ipynb        # EDA + 6 hipótesis + limpieza de categorías → dataset_limpio.csv
+│   ├── 02_Preparacion_Datos.ipynb # Carga base limpia, split, imputación, outliers, FE, one-hot
+│   └── 03_Modeling_Churn.ipynb   # Baseline (DT) + Random Forest
 ├── reports/               # Gráficos generados por los notebooks
 ├── models/                # Modelos serializados (.pkl) — gitignored
-├── src/                   # Utilidades reutilizables
+├── src/                   # Utilidades reutilizables (preprocessing.py)
 ├── decisions.md           # Decisiones documentadas del proyecto
 └── requirements.txt
 ```
@@ -28,8 +29,14 @@ churn_tp/
 ## Decisiones clave
 1. **Métrica principal: Recall** — minimizar falsos negativos (churners no detectados)
 2. **Split estratificado** — preserva 16.8% de churn en train y test
-3. **`class_weight='balanced'`** en Random Forest — compensa el desbalance
-4. **Variable `Complain` en vigilancia** — riesgo de data leakage (queja puede ser posterior al churn)
+3. **Split ANTES de imputar** — medianas y percentiles fit solo en train (evita leakage)
+4. **One-Hot Encoding** para categóricas nominales (no LabelEncoder)
+5. **Cap de outliers al percentil 99** (Tenure, WarehouseToHome, NumberOfAddress)
+6. **Feature engineering**: CashbackPerOrder, CouponPerOrder, AppHoursPerDevice, IsNewCustomer
+7. **`class_weight='balanced'`** en Random Forest — compensa el desbalance
+8. **Variable `Complain` en vigilancia** — base guardada con y sin ella para comparar (riesgo de leakage)
+
+Ver el detalle de cada decisión en `decisions.md`.
 
 ## Entorno
 - Python en Miniconda: `/Users/tomasattas/miniconda3/`
