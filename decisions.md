@@ -114,3 +114,29 @@ Registro de cada decisión importante del proyecto.
 2. **Por qué:** La versión anterior mezclaba prep (con leakage) y modelado en un solo notebook. Separar deja la lógica reutilizable, testeable y sin duplicar.
 3. **Alternativas que descarté:** Mantener todo en un notebook de modelado.
 4. **Consecuencias:** El notebook de modelado viejo se renumeró de `02` a `03`.
+
+---
+
+## Decisión — Resolución de H3 (DaySinceLastOrder con relación invertida)
+
+1. **Qué decidí:** Mantener `DaySinceLastOrder` como feature en el modelo. Descartar la recomendación de negocio original ("email a los 15 días sin compra").
+2. **Por qué:** En el EDA la relación apareció invertida (churneados con DSL mediana 2.0d vs activos 4.0d). La investigación en `01b_Investigacion_Anomalias_H3_H4.ipynb` mostró:
+   - **No es sesgo por nulos** (5.4% vs 5.7% nulos, chi² p=0.78).
+   - **Es confundidor con Tenure**: en el quartil más nuevo el churn es 38–59% para todos los DSL, y como los nuevos dominan la población churneada, arrastran la mediana hacia DSL bajo.
+   - **Hay interacción fuerte con Complain**: "compra reciente + queja" = 38.9% churn vs 7.1% en "lejano + sin queja" (efecto 5.5×).
+   - `DSL` queda 3º en información mutua con el target (0.0262), después de Tenure y Cashback.
+3. **Alternativas que descarté:** Dropear `DaySinceLastOrder` por relación contraintuitiva.
+4. **Consecuencias:** Preferir modelos basados en árboles (Random Forest, GBM) que capturan interacciones automáticamente. Si se usa regresión logística, crear features `DSL × Complain` y `DSL × IsNewCustomer`.
+
+---
+
+## Decisión — Resolución de H4 (SatisfactionScore con relación contraintuitiva)
+
+1. **Qué decidí:** Mantener `SatisfactionScore` en el set inicial de features pero con **expectativa baja**. Si en el modelo final no aparece en el top-10 de feature importance, descartar.
+2. **Por qué:** En el EDA los churneados tenían score promedio MÁS ALTO (3.39 vs 3.00). La investigación en `01b_Investigacion_Anomalias_H3_H4.ipynb` mostró:
+   - **No es escala invertida**: la diferencia entre con/sin queja es solo -0.095 (score y queja son casi independientes).
+   - **El churn rate crece monótonamente con el score** (11.5%, 12.6%, 17.2%, 17.1%, 23.8%) — la relación es real.
+   - **Tenure es confundidor parcial**: el patrón es fuerte en clientes nuevos (Q1: 36%→57%) pero se aplana en clientes viejos.
+   - **Poder predictivo muy bajo**: información mutua = 0.0054, **25× menor que Tenure (0.1359)**. El score auto-reportado parece no reflejar sentimiento real (posiblemente inflado o medido en otro momento del journey).
+3. **Alternativas que descarté:** (a) Dropear inmediatamente (sin validar contra otros modelos); (b) Crear feature binaria `HighSatisfaction = (score >= 4)` — queda como opción de transformación si el score crudo no aporta.
+4. **Consecuencias:** No usar `SatisfactionScore` para decisiones de negocio sin validar antes cómo y cuándo se mide en el sistema fuente.
