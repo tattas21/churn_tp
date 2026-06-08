@@ -117,26 +117,22 @@ Registro de cada decisión importante del proyecto.
 
 ---
 
-## Decisión — Resolución de H3 (DaySinceLastOrder con relación invertida)
+## Decisión — Resolución H3: DaySinceLastOrder se mantiene
 
-1. **Qué decidí:** Mantener `DaySinceLastOrder` como feature en el modelo. Descartar la recomendación de negocio original ("email a los 15 días sin compra").
-2. **Por qué:** En el EDA la relación apareció invertida (churneados con DSL mediana 2.0d vs activos 4.0d). La investigación en `01b_Investigacion_Anomalias_H3_H4.ipynb` mostró:
-   - **No es sesgo por nulos** (5.4% vs 5.7% nulos, chi² p=0.78).
-   - **Es confundidor con Tenure**: en el quartil más nuevo el churn es 38–59% para todos los DSL, y como los nuevos dominan la población churneada, arrastran la mediana hacia DSL bajo.
-   - **Hay interacción fuerte con Complain**: "compra reciente + queja" = 38.9% churn vs 7.1% en "lejano + sin queja" (efecto 5.5×).
-   - `DSL` queda 3º en información mutua con el target (0.0262), después de Tenure y Cashback.
-3. **Alternativas que descarté:** Dropear `DaySinceLastOrder` por relación contraintuitiva.
-4. **Consecuencias:** Preferir modelos basados en árboles (Random Forest, GBM) que capturan interacciones automáticamente. Si se usa regresión logística, crear features `DSL × Complain` y `DSL × IsNewCustomer`.
+1. **Qué decidí:** Conservar `DaySinceLastOrder` como feature del modelo y descartar la regla de negocio original de enviar email de reactivación a los 15 días sin compra.
+2. **Por qué:** La inactividad por sí sola no identifica clientes en riesgo — quienes más churnean son los clientes nuevos, que por construcción tienen pocos días sin comprar. El verdadero patrón de riesgo para retención es "compra reciente con queja sin resolver" (38.9% churn vs 7.1% en el escenario opuesto), no la inactividad sostenida. La variable sí aporta al modelo cuando se combina con Tenure y Complain (ver `01b_Investigacion_Anomalias_H3_H4.ipynb`: tasa de nulos sin sesgo p=0.78, información mutua 0.0262 — tercera más alta del set).
+3. **Alternativas que descarté:**
+   - Dropear `DaySinceLastOrder` por su relación contraintuitiva en el EDA.
+   - Mantener la regla de "reactivación a los 15 días" como acción de negocio.
+4. **Consecuencias:** El modelo debe poder capturar interacciones DSL × Complain × Tenure — eso prioriza modelos basados en árboles (Random Forest, GBM); en caso de usar un modelo lineal hay que crear features de interacción explícitas. La acción de negocio recomendada cambia: alertas sobre quejas sin resolver en clientes recientes, no campañas por inactividad.
 
 ---
 
-## Decisión — Resolución de H4 (SatisfactionScore con relación contraintuitiva)
+## Decisión — Resolución H4: SatisfactionScore queda en evaluación
 
-1. **Qué decidí:** Mantener `SatisfactionScore` en el set inicial de features pero con **expectativa baja**. Si en el modelo final no aparece en el top-10 de feature importance, descartar.
-2. **Por qué:** En el EDA los churneados tenían score promedio MÁS ALTO (3.39 vs 3.00). La investigación en `01b_Investigacion_Anomalias_H3_H4.ipynb` mostró:
-   - **No es escala invertida**: la diferencia entre con/sin queja es solo -0.095 (score y queja son casi independientes).
-   - **El churn rate crece monótonamente con el score** (11.5%, 12.6%, 17.2%, 17.1%, 23.8%) — la relación es real.
-   - **Tenure es confundidor parcial**: el patrón es fuerte en clientes nuevos (Q1: 36%→57%) pero se aplana en clientes viejos.
-   - **Poder predictivo muy bajo**: información mutua = 0.0054, **25× menor que Tenure (0.1359)**. El score auto-reportado parece no reflejar sentimiento real (posiblemente inflado o medido en otro momento del journey).
-3. **Alternativas que descarté:** (a) Dropear inmediatamente (sin validar contra otros modelos); (b) Crear feature binaria `HighSatisfaction = (score >= 4)` — queda como opción de transformación si el score crudo no aporta.
-4. **Consecuencias:** No usar `SatisfactionScore` para decisiones de negocio sin validar antes cómo y cuándo se mide en el sistema fuente.
+1. **Qué decidí:** Incluir `SatisfactionScore` en el set inicial de features con expectativa baja, y descartar la variable si no aparece en el top-10 de feature importance del modelo final.
+2. **Por qué:** El score auto-reportado se mueve con el churn de forma estadísticamente significativa pero su poder de discriminación es ínfimo (información mutua 25× menor que Tenure). Eso indica que el indicador no captura las verdaderas razones de salida (precio, conveniencia, competencia) y por lo tanto no debería guiar acciones de retención por sí solo. Mantenerlo como candidato deja que el modelo valide empíricamente si encuentra alguna utilidad marginal sin comprometer la estrategia (ver `01b_Investigacion_Anomalias_H3_H4.ipynb`: la escala no está invertida, dif. con/sin queja = -0.095, casi nulo).
+3. **Alternativas que descarté:**
+   - Dropear inmediatamente sin validar contra el modelo.
+   - Transformar a binaria `HighSatisfaction = (score >= 4)` — queda como opción si el score crudo no aporta en el modelo final.
+4. **Consecuencias:** Ninguna acción de negocio de retención se construye sobre este indicador hasta validar con el equipo de datos cómo y cuándo se recolecta el score. Si el modelo final lo descarta, la variable sale del pipeline de producción.
