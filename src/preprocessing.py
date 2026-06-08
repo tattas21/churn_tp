@@ -85,11 +85,22 @@ def apply_caps(df: pd.DataFrame, caps: dict) -> pd.DataFrame:
 def add_features(df: pd.DataFrame) -> pd.DataFrame:
     """Feature engineering row-wise (sin leakage; aplicar tras imputar).
 
+    Todas las features se calculan fila-a-fila usando solo columnas del propio
+    registro — sin estadísticas globales — por lo que es seguro aplicarlas
+    idénticas a train y test, siempre y cuando la imputación previa también
+    haya sido fit-on-train (ver `fit_impute_values` / `apply_impute`).
+
     Variables derivadas de las hipótesis del EDA:
       - CashbackPerOrder : cashback promedio por orden (incentivo financiero, H5)
       - CouponPerOrder   : intensidad de uso de cupones por orden
       - AppHoursPerDevice: horas en app por dispositivo registrado (engagement)
       - IsNewCustomer    : cliente con <=3 meses de tenure (riesgo temprano, H1)
+
+    Variables adoptadas tras evaluación empírica en `notebooks/02b_Feature_Engineering_Exploracion.ipynb`:
+      - OrdersPerMonth   : tasa de órdenes por mes calendar (engagement temporal)
+      - CashbackPerMonth : tasa de cashback recibido por mes (valor temporal)
+
+    `Tenure + 1` evita división por cero en clientes con `Tenure == 0`.
     """
     df = df.copy()
     # OrderCount tiene mínimo 1, no hay división por cero
@@ -97,4 +108,6 @@ def add_features(df: pd.DataFrame) -> pd.DataFrame:
     df["CouponPerOrder"] = df["CouponUsed"] / df["OrderCount"]
     df["AppHoursPerDevice"] = df["HourSpendOnApp"] / df["NumberOfDeviceRegistered"]
     df["IsNewCustomer"] = (df["Tenure"] <= 3).astype(int)
+    df["OrdersPerMonth"] = df["OrderCount"] / (df["Tenure"] + 1)
+    df["CashbackPerMonth"] = df["CashbackAmount"] / (df["Tenure"] + 1)
     return df

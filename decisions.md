@@ -114,3 +114,25 @@ Registro de cada decisión importante del proyecto.
 2. **Por qué:** La versión anterior mezclaba prep (con leakage) y modelado en un solo notebook. Separar deja la lógica reutilizable, testeable y sin duplicar.
 3. **Alternativas que descarté:** Mantener todo en un notebook de modelado.
 4. **Consecuencias:** El notebook de modelado viejo se renumeró de `02` a `03`.
+
+---
+
+## Decisión — Adopción de features per-tenure (OrdersPerMonth, CashbackPerMonth)
+
+1. **Qué decidí:** Agregar `OrdersPerMonth = OrderCount / (Tenure + 1)` y `CashbackPerMonth = CashbackAmount / (Tenure + 1)` al pipeline de feature engineering.
+2. **Por qué:** Ambas capturan la **tasa por mes** de engagement (órdenes) y de incentivo recibido (cashback), una señal de negocio que las variables crudas mezclan con la antigüedad del cliente. En el benchmark del notebook `02b` cada una mejora el Recall del Random Forest sobre el baseline (5-fold CV: +0.0106 y +0.0053 respectivamente, con MI 0.118 y 0.148 — la segunda mayor del set). Convertir el volumen total en una tasa hace explícita la pregunta "este cliente compra/recibe poco por antigüedad o realmente está desenganchado", que es la pregunta accionable para retención.
+3. **Alternativas que descarté:**
+   - Adoptar las 7 candidatas evaluadas: el lift adicional (+0.0053 de Recall sobre adoptar solo estas dos) no justifica duplicar la complejidad del feature set.
+   - Mantener solo las features crudas (`OrderCount`, `CashbackAmount`, `Tenure`) y dejar que el RF infiera la tasa: el modelo lo intenta pero pierde ~1 punto de Recall por hacerlo implícito.
+4. **Consecuencias:** Se extiende `add_features()` en `src/preprocessing.py` para crear ambas columnas tras imputar. Se regeneran los 4 CSVs en `data/processed/` (con/sin Complain × train/test). El feature count pasa de 34 a 36. El notebook 03 de modelado consume las versiones nuevas. Ambas features son row-wise sobre datos ya imputados — sin leakage (ver auditoría en el PR de adopción).
+
+---
+
+## Decisión — Descarte de 5 candidatas de feature engineering
+
+1. **Qué decidí:** No adoptar `RecentPurchaseWithComplaint`, `NewCustomerComplaint`, `HighSatisfaction`, `MultiAddress` ni `Dormant` tras evaluarlas en `notebooks/02b_Feature_Engineering_Exploracion.ipynb`.
+2. **Por qué:** Para tres de ellas (`HighSatisfaction`, `MultiAddress`, `Dormant`) la información mutua con el target queda debajo del piso de 0.005 — no aportan señal incremental al modelo. Para las otras dos (interacciones `DSL × Complain` y `Tenure × Complain`) los gates pasan pero el Recall del Random Forest **empeora** al agregarlas (−0.0039 y −0.0066 en 5-fold CV): el modelo ya las descubre vía splits anidados y la versión pre-computada solo introduce varianza. Operativamente, esto significa que la regla de negocio histórica "campaña de reactivación a los 15 días sin compra" (que `Dormant` formalizaba) no se sostiene con la evidencia disponible.
+3. **Alternativas que descarté:**
+   - Adoptar las 7 candidatas en bloque por el lift agregado (+0.0159) — la diferencia respecto al shortlist de 2 features cae dentro del std del benchmark (~0.025) y no compensa la complejidad.
+   - Forzar la inclusión de las interacciones pre-computadas "por interpretabilidad" — pierde validez si el modelo final tiene peor performance.
+4. **Consecuencias:** El feature set adoptado en el pipeline es 34 + 2 = 36 columnas, sin las interacciones explícitas. La regla de negocio "email a 15 días sin compra" queda formalmente retirada. `SatisfactionScore` permanece como ordinal sin binarizar.
