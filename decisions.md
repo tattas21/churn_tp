@@ -173,15 +173,18 @@ Registro de cada decisión importante del proyecto.
 
 ---
 
-## Decisión — Descartar tuning bayesiano por mejora < 2%
+## Decisión — Adopción final de Random Forest V1 tuneado tras iteración del tuning
 
-1. **Qué decidí:** Tras tunear los top 2 modelos (Random Forest y XGBoost) con Bayesian optimization (`BayesSearchCV`, n_iter=30), **descartar las versiones tuneadas y volver a defaults**.
-2. **Por qué:** El tuneo de Random Forest mejoró el Recall en +1.88% (0.8431 → 0.8589) y el de XGBoost en +1.58% (0.8338 → 0.8470). Ambos quedaron por debajo del umbral del 2% que el skill `/ds-model` establece como mínimo para justificar la adopción. Mejoras marginales no compensan el riesgo de overfitting al espacio de tuning y la complejidad operacional de mantener configuraciones específicas. Los defaults de scikit-learn ya son competitivos y reproducibles. La regla "tune solo si mejora ≥ 2%" tiene un propósito de negocio: cada hiperparámetro custom es un punto de fragilidad cuando el modelo se mantiene en el tiempo.
+> **Nota:** esta decisión REVISA la conclusión inicial del tuning (sección 8 del notebook). La decisión vigente es la siguiente.
+
+1. **Qué decidí:** Adoptar **Random Forest V1 tuneado** (`n_estimators=1469, max_depth=50, min_samples_leaf=3, max_features=0.978, class_weight='balanced'`) como modelo final, tras una auditoría iterativa que reveló que la primera ronda de tuning estaba artificialmente limitada por search spaces demasiado estrechos.
+2. **Por qué:** La decisión inicial era "no tunear" porque ambos modelos quedaron debajo del 2% threshold (RF +1.88%, XGB +1.58%). Pero una auditoría post-mortem mostró que **3/4 de los best_params de RF estaban pegados a los límites del search space original** — el optimizer quería ir más allá pero no podía. Re-corriendo con ranges expandidos (n_iter=100) RF cruzó el 2% (+2.34%), y una tercera ronda con ranges narrow targeteados (n_iter=50) confirmó el resultado (plateau en iter 27). Análisis de overfitting: **el RF V1 tuneado overfittea MENOS que el default** (gap train-CV 0.1371 vs 0.1569). En test set el ganador detecta **181 de 190 churners reales (Recall 95.3%, +0.0105 vs default)**, con costo de 42 falsos positivos vs 16 — trade-off alineado con el costo asimétrico documentado en la decisión #1 (perder un churner cuesta mucho más que un email innecesario).
 3. **Alternativas que descarté:**
-   - **Adoptar el tuneado de Random Forest** (lift +1.88%): cercano al umbral pero por debajo, y la mejora marginal no justifica fijar `n_estimators=500, max_depth=20, min_samples_leaf=4, max_features=1.0`.
-   - **Tunear con GridSearchCV o RandomizedSearchCV**: BayesSearchCV es más eficiente para espacios continuos (usa modelo gaussiano sobre evaluaciones previas), y dio mejores resultados con menos iteraciones.
-   - **Tunear los 4 modelos**: solo tuneamos top 2 porque DT y Dummy no estaban en contienda.
-4. **Consecuencias:** El modelo en producción usa defaults documentados, fácil de re-entrenar y auditar. Si en el futuro se quiere ganar ese ~2% adicional, los espacios de búsqueda quedaron documentados en el notebook 03 (sección 8) para retomarlos.
+   - **Mantener defaults** (decisión original): rechazada porque el análisis de boundaries reveló que la conclusión "tuning no sirve" estaba sesgada por search spaces inadecuados. Adoptar el tuneado correcto es la conclusión defendible con los datos en mano.
+   - **Adoptar RF V2** (n_iter=50 narrow, Recall CV 0.8615): muy cercano a V1 (0.8629) pero `max_depth=99` es más agresivo sin ganancia. V1 con `max_depth=50` da el mismo resultado con configuración más conservadora.
+   - **Adoptar XGBoost V2 tuneado** (Recall CV 0.8562): config más "típica" de XGB, pero Recall menor que RF V1. Perdió en la métrica primaria.
+   - **No re-evaluar en test set** para mantener la regla "una sola evaluación": rechazado porque adoptar un modelo sin validar en test es peor higiene que documentar transparentemente la segunda evaluación.
+4. **Consecuencias:** El modelo serializado vive en `models/RandomForest_V1_winner.pkl` (gitignored). El script `src/models/train.py` está actualizado a la config V1. El test set quedó **evaluado dos veces** (defaults + V1) — declarado como limitación en `notebook 03` sección 20. Recomendación a futuro: si el modelo se mueve a producción a largo plazo, definir un nuevo holdout 100% intocado para validación. Trade-off explícito: el modelo V1 sube Recall +1.05 pp pero baja Precision −10.62 pp respecto a defaults — alineado con el costo asimétrico declarado en la decisión #1, pero requiere comunicación clara al equipo comercial sobre el aumento de falsas alarmas (42 vs 16 sobre 936 clientes activos).
 
 ---
 

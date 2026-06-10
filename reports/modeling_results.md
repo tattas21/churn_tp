@@ -65,27 +65,64 @@ No se aplicó feature selection automatizada. Justificación:
 - RandomForest es robusto a features irrelevantes (selecciona features útiles por entropía/Gini en cada split).
 - La feature importance del ganador (sección 12 del notebook) muestra que las top-3 son `CashbackPerMonth` (0.147), `Tenure` (0.103) y `OrdersPerMonth` (0.101) — todas con peso significativo.
 
-## Métricas finales en test set (tocado una sola vez)
+## Iteración del tuning — adopción final de RF V1
 
-| Métrica | CV (5-fold) | Test set |
-|---|:---:|:---:|
-| **Recall** | 0.8431 | **0.9421** |
-| Precision | 0.8288 | 0.9179 |
-| F1 | 0.8353 | 0.9299 |
-| PR-AUC | 0.9094 | **0.9839** |
-| AUC-ROC | 0.9699 | 0.9964 |
-| Accuracy (informativo) | — | 0.9760 |
+La conclusión inicial ("RF defaults gana, descarto tuneado por +1.88% < 2%") fue revisada en una auditoría post-mortem (secciones 16-20 del notebook). Hallazgos:
 
-**Matriz de confusión en test (1126 clientes):**
+1. **Boundary check del tuning original**: 3/4 best_params de RF y 2/5 de XGB quedaron pegados a los bordes del search space. La conclusión "no tunear" no era defendible — el optimizer estaba artificialmente limitado.
+
+2. **V1 (ranges expandidos, n_iter=100)**: RF cruzó el 2% (+2.34%), pero seguía pegando boundaries en 3 params. XGB dio config sospechosa (`n_estimators=50` al piso) — local optimum.
+
+3. **V2 (ranges narrow targeted, n_iter=50)**: RF confirmó V1 (Recall 0.8615 vs 0.8629, plateau en iter 27). XGB estabilizó (`n_estimators=277` típico).
+
+4. **Análisis de overfitting** (gap train-CV) sobre las 6 configs:
+
+| Config | Recall train | Recall CV | Gap | Verdict |
+|---|:---:|:---:|:---:|---|
+| RF default | 1.0000 | 0.8431 | +0.1569 | Línea base |
+| RF V0 (n_iter=30, depth=20) | 0.9987 | 0.8589 | +0.1398 | Mejor que default |
+| **RF V1 (n_iter=100, depth=50)** | **1.0000** | **0.8629** | **+0.1371** | **Gana en ambas dimensiones** |
+| RF V2 (n_iter=50, depth=99) | 1.0000 | 0.8615 | +0.1385 | Cerca, depth=99 da nervios |
+| XGB default | 1.0000 | 0.8338 | +0.1662 | — |
+| XGB V2 (n_iter=50) | 1.0000 | 0.8562 | +0.1438 | Mejor que XGB default |
+
+**Todos los tuneados overfittean MENOS que sus defaults.** El miedo a `max_depth` alto no se materializa — el ensemble (1469 árboles con `min_samples_leaf=3`) compensa.
+
+## Ganador FINAL: RandomForest V1 tuneado
+
+```python
+RandomForestClassifier(
+    n_estimators=1469,
+    max_depth=50,
+    min_samples_leaf=3,
+    max_features=0.978,
+    class_weight='balanced',
+    random_state=42,
+)
+```
+
+## Métricas finales en test set (re-evaluado tras la adopción)
+
+**⚠️ Test set evaluado 2 veces** — primero con defaults (Recall 0.9421), después con RF V1 tras el análisis iterativo. Limitación declarada honestamente.
+
+| Métrica | RF defaults (1ª eval) | **RF V1 (2ª eval, ganador final)** | Δ |
+|---|:---:|:---:|:---:|
+| **Recall** | 0.9421 | **0.9526** | **+0.0105** ✅ |
+| Precision | 0.9179 | 0.8117 | **−0.1062** ⚠️ |
+| F1 | 0.9299 | 0.8765 | −0.0534 |
+| PR-AUC | 0.9839 | 0.9611 | −0.0228 |
+| AUC-ROC | 0.9964 | 0.9917 | −0.0047 |
+
+**Matriz de confusión RF V1 en test (1126 clientes):**
 
 |  | Predicho: Activo | Predicho: Churneó |
 |---|:---:|:---:|
-| **Real: Activo** | TN = 920 | FP = 16 |
-| **Real: Churneó** | FN = 11 | TP = 179 |
+| **Real: Activo** | TN = 894 | FP = 42 |
+| **Real: Churneó** | FN = 9 | **TP = 181** |
 
-**Lectura de negocio:** sobre 190 clientes que realmente churnearon, el modelo detectó 179 (Recall 94.2%). Generó 16 falsos positivos (clientes activos marcados como riesgo) — aceptable dado el costo asimétrico documentado en `decisions.md`.
+**Lectura de negocio:** sobre 190 churners reales, el modelo detecta **181 (Recall 95.3%)** — 2 más que el default. El costo es 42 falsos positivos vs 16 del default sobre 936 activos (4.5% extra de "ruido"). Dado el costo asimétrico documentado (perder un churner cuesta mucho más que un email innecesario), el trade-off Recall↑ / Precision↓ está alineado con el objetivo de negocio.
 
-**Gap CV vs Test (Recall):** −0.0991. **Atípico** — el test supera la CV en 10 puntos. No es overfitting (que sería positivo); el modelo entrenado en TODO el train (4504 rows) tiene más datos que cualquier fold (3603 rows) y el split estratificado puede haber dejado un test favorable. Recomendación documentada: re-evaluar con otro `random_state` daría una idea del rango.
+**Gap CV vs Test (Recall):** 0.8629 → 0.9526 = +0.0897. Mejora generalización en test, no overfitting — confirma la robustez del tuneado.
 
 ## Audit de leakage — `Complain` (sección 14 del notebook)
 

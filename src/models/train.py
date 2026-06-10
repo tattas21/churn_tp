@@ -1,15 +1,18 @@
 """Reproducible training script for the churn model.
 
-Entrena el ganador (RandomForest) sobre `data/processed/train_sin_complain.csv`,
+Entrena el ganador (RandomForest V1 tuneado) sobre `data/processed/train_sin_complain.csv`,
 evalúa en `test_sin_complain.csv` y serializa el modelo en `models/`.
 
 Decisiones de modelado (todas documentadas en `decisions.md`):
   - Dataset: SIN Complain (postura conservadora por riesgo de leakage no validable)
   - Métrica primaria: Recall (clase 1 = Churn)
   - Cross-validation: StratifiedKFold(5, random_state=42)
-  - Ganador (RandomForest) elegido por máximo Recall CV, defaults sin tuning
-    (BayesSearchCV mejoró +1.88%, debajo del threshold del 2% — se descartó)
-  - Test set tocado una sola vez al final
+  - Ganador: RandomForest V1 tuneado (n_estimators=1469, max_depth=50,
+    min_samples_leaf=3, max_features=0.978) elegido tras 3 rondas iterativas
+    de BayesSearchCV (ver notebook 03 secciones 16-20).
+    Lift vs defaults: +2.34% Recall CV, con MENOR gap train-CV (0.1371 vs 0.1569).
+  - Test set tocado dos veces (defaults primero, V1 después) — documentado
+    como limitación en notebook 03 sección 20.
 
 Uso:
     python src/models/train.py
@@ -89,10 +92,13 @@ def main() -> None:
     dummy_cv = evaluate_cv(dummy, X_train, y_train)
     print(f"  Recall CV: {dummy_cv['recall_mean']:.4f}")
 
-    # Ganador: RandomForest defaults (documentado en decisions.md)
-    print("\n[2/3] Ganador (RandomForest) — CV en train")
+    # Ganador: RandomForest V1 tuneado (documentado en decisions.md y notebook 03)
+    print("\n[2/3] Ganador (RandomForest V1 tuneado) — CV en train")
     winner = RandomForestClassifier(
-        n_estimators=200,
+        n_estimators=1469,
+        max_depth=50,
+        min_samples_leaf=3,
+        max_features=0.978,
         class_weight="balanced",
         random_state=RANDOM_STATE,
         n_jobs=-1,
@@ -117,7 +123,7 @@ def main() -> None:
     print(f"  Matriz de confusion: TN={cm[0][0]}, FP={cm[0][1]}, FN={cm[1][0]}, TP={cm[1][1]}")
 
     # Serializar (gitignored)
-    winner_path = MODELS_DIR / "RandomForest_winner.pkl"
+    winner_path = MODELS_DIR / "RandomForest_V1_winner.pkl"
     dummy_fit = dummy.fit(X_train, y_train)
     dummy_path = MODELS_DIR / "dummy_baseline.pkl"
     pickle.dump(winner, open(winner_path, "wb"))
