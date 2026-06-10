@@ -161,15 +161,17 @@ Registro de cada decisión importante del proyecto.
 
 ---
 
-## Decisión — Random Forest como modelo ganador
+## Decisión — Random Forest como familia ganadora
 
-1. **Qué decidí:** Adoptar `RandomForestClassifier` con defaults (`n_estimators=200`, `class_weight='balanced'`, `random_state=42`) como modelo de producción para predecir churn, en lugar de Decision Tree o XGBoost.
-2. **Por qué:** Random Forest tuvo el mejor Recall en cross-validation (0.8431 ± 0.032) — la métrica que la consigna establece como primaria por el costo asimétrico de perder un churner. XGBoost quedó muy cerca (0.8338) pero con mayor varianza entre folds (std 0.043 vs 0.032), y perdió también el desempate por PR-AUC (0.9091 vs 0.9011). El Decision Tree, aunque obligatorio per rúbrica y útil para interpretar reglas, quedó 8 puntos por debajo (0.7652). En test set el ganador detectó **179 de 190 churners reales (Recall 94.2%)** con solo 16 falsos positivos sobre 936 clientes activos — performance que habilita acciones de retención dirigidas sin saturar al equipo comercial con falsas alarmas.
+> **Nota:** esta decisión define la **familia** del modelo (RF vs DT vs XGB). La **configuración exacta** dentro de RF (defaults vs tuneado) se resuelve en la decisión siguiente tras una iteración del tuning.
+
+1. **Qué decidí:** Adoptar la familia **`RandomForestClassifier`** como modelo de producción para predecir churn, en lugar de Decision Tree o XGBoost.
+2. **Por qué:** Random Forest tuvo el mejor Recall en cross-validation (0.8431 ± 0.032 en defaults) — la métrica que la consigna establece como primaria por el costo asimétrico de perder un churner. XGBoost quedó muy cerca (0.8338) pero con mayor varianza entre folds (std 0.043 vs 0.032), y perdió también el desempate por PR-AUC (0.9094 vs 0.9011). El Decision Tree, aunque obligatorio per rúbrica y útil para interpretar reglas, quedó 8 puntos por debajo (0.7652). RF combina lo mejor de ambos: captura interacciones nativamente (como confirma el análisis de feature engineering en `02b`) y promedia varianza con su naturaleza de ensemble — exactamente lo que un dataset desbalanceado y con interacciones (DSL × Complain × Tenure documentadas en `01b`) necesita.
 3. **Alternativas que descarté:**
-   - **XGBoost defaults**: el más cercano (Recall 0.8338), descartado por mayor varianza entre folds y peor PR-AUC.
-   - **Decision Tree**: descartado por performance — sirve para visualización pero su Recall es 8 puntos inferior.
+   - **XGBoost (familia)**: el contendiente más cercano (Recall 0.8338), descartado por mayor varianza entre folds y peor PR-AUC. Quedó como segunda opción en caso de que RF mostrara problemas.
+   - **Decision Tree**: descartado por performance — sirve para visualización pero su Recall es 8 puntos inferior. Hubiera ganado si la rúbrica priorizara interpretabilidad sobre detección.
    - **Logistic Regression**: no entró en la comparación porque tras el feature engineering del notebook `02b` el modelo se beneficia de capturar interacciones (DSL × Complain × Tenure), algo que un modelo lineal no captura sin pre-computar todas las interacciones manualmente.
-4. **Consecuencias:** El modelo serializado vive en `models/RandomForest_winner.pkl` (gitignored). El script reproducible `src/models/train.py` permite re-entrenar desde CLI. Las dos features adoptadas en la decisión previa (`CashbackPerMonth`, `OrdersPerMonth`) quedaron #1 y #3 en feature importance, validando retrospectivamente el trabajo de FE.
+4. **Consecuencias:** La familia queda fijada en RF. La configuración exacta dentro de RF (defaults vs tuneado) se decide en la siguiente entrada tras un análisis iterativo del tuning. Las dos features adoptadas en la decisión previa (`CashbackPerMonth`, `OrdersPerMonth`) quedaron #1 y #3 en feature importance, validando retrospectivamente el trabajo de FE.
 
 ---
 
