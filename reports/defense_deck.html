@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Defensa Oral — TP Churn de Clientes</title>
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/white.css" id="theme">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/monokai.css">
+
+  <style>
+    .reveal h1 { color: #1a5490; font-size: 1.8em; }
+    .reveal h2 { color: #1a5490; font-size: 1.4em; }
+    .reveal h3 { color: #34495e; font-size: 1.15em; }
+    .reveal .accent { color: #e74c3c; font-weight: bold; }
+    .reveal .green  { color: #27ae60; font-weight: bold; }
+    .reveal .small  { font-size: 0.65em; }
+    .reveal .xsmall { font-size: 0.5em; color: #666; }
+    .reveal table { font-size: 0.65em; margin: 0.5em auto; }
+    .reveal table th { background: #f0f4f8; color: #1a5490; padding: 6px 10px; }
+    .reveal table td { padding: 4px 10px; }
+    .reveal blockquote { border-left: 4px solid #1a5490; padding-left: 16px; font-style: italic; color: #555; }
+    .reveal img { border: none; box-shadow: none; max-height: 450px; }
+    .reveal .pipeline {
+      font-family: 'Courier New', monospace;
+      font-size: 0.6em;
+      background: #f8f9fa;
+      padding: 18px;
+      border-radius: 6px;
+      text-align: left;
+      line-height: 1.6;
+    }
+    .reveal .footnote { font-size: 0.5em; color: #888; margin-top: 20px; }
+    .reveal section[data-state="big-number"] h1 { font-size: 4em; color: #e74c3c; }
+    .reveal .kicker { color: #1a5490; font-size: 0.7em; text-transform: uppercase; letter-spacing: 2px; font-weight: bold; }
+    .reveal ul li { margin-bottom: 8px; }
+    .reveal .twocol { display: flex; gap: 30px; align-items: flex-start; }
+    .reveal .twocol > div { flex: 1; }
+    .reveal .badge {
+      display: inline-block; padding: 2px 10px; border-radius: 12px;
+      font-size: 0.7em; font-weight: bold; margin: 2px;
+    }
+    .reveal .badge.green { background: #d4edda; color: #155724; }
+    .reveal .badge.red   { background: #f8d7da; color: #721c24; }
+    .reveal .badge.amber { background: #fff3cd; color: #856404; }
+  </style>
+</head>
+<body>
+<div class="reveal">
+  <div class="slides">
+
+    <!-- SLIDE 1: Título -->
+    <section>
+      <h1>Predicción de Churn de Clientes</h1>
+      <p class="kicker">Inteligencia Artificial Aplicada a Negocios</p>
+      <br>
+      <p>TP Final — Licenciatura en Negocios y Tecnología</p>
+      <p class="small">Primer Cuatrimestre 2026</p>
+      <br>
+      <p class="small"><strong>Bautista Ríos</strong> · Tomás Attas · Agustín Venutolo</p>
+      <p class="xsmall">Junio 2026</p>
+      <aside class="notes">
+        15 min total. Saludo, presento al equipo. Aclaro: somos analistas de retención, no programadores.
+        El foco está en qué hicimos con la herramienta, no en cómo construimos la herramienta.
+      </aside>
+    </section>
+
+    <!-- SLIDE 2: Problema de negocio -->
+    <section>
+      <p class="kicker">El problema</p>
+      <h2>La pregunta del gerente</h2>
+      <blockquote>
+        "¿Podemos detectar quiénes están por irse antes de que dejen de comprar?<br>
+        ¿Por qué nos dejan?"
+      </blockquote>
+      <br>
+      <div class="twocol">
+        <div>
+          <h3>El número</h3>
+          <p><span class="accent" style="font-size: 2em">17%</span><br>
+          <span class="small">de la base churneó el año pasado<br>(945 clientes de 5,630)</span></p>
+        </div>
+        <div>
+          <h3>Por qué duele</h3>
+          <p>Adquirir un cliente nuevo cuesta <span class="accent">5-7×</span> más que retener uno existente.<br>
+          <span class="small">Cada churner no detectado = costo de adquisición + valor recurrente perdido.</span></p>
+        </div>
+      </div>
+      <aside class="notes">
+        Cito la pregunta literal de la consigna. El 17% no es solo número técnico — es plata real.
+        Si retenemos a la mitad, ahorramos cientos de costos de adquisición.
+      </aside>
+    </section>
+
+    <!-- SLIDE 3: Dataset -->
+    <section>
+      <p class="kicker">Los datos</p>
+      <h2>5,630 clientes de e-commerce</h2>
+      <table>
+        <thead>
+          <tr><th>Atributo</th><th>Valor</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Filas</td><td>5,630 clientes (1 ID + 1 target + 18 features)</td></tr>
+          <tr><td>Target</td><td><code>Churn</code> (1 = se fue, 0 = sigue activo)</td></tr>
+          <tr><td>Desbalance</td><td>16.8% positivo / 83.2% negativo</td></tr>
+          <tr><td>Variables clave</td><td>Tenure, DaySinceLastOrder, Complain, CashbackAmount, SatisfactionScore</td></tr>
+          <tr><td>Calidad</td><td>7 columnas con nulos 4-5% · 3 columnas con duplicados de categorías (CC/Credit Card, etc.)</td></tr>
+        </tbody>
+      </table>
+      <p class="small">Con 16.8% positivo, <span class="accent">la accuracy es una métrica engañosa</span>: predecir siempre "no churn" da 83% de aciertos y detecta cero churners.</p>
+      <aside class="notes">
+        Acá presento el dataset. Llamo la atención sobre el desbalance — es el origen de la decisión de Recall como métrica primaria.
+        Las 7 columnas con nulos son las que tuvimos que imputar (con disciplina anti-leakage).
+      </aside>
+    </section>
+
+    <!-- SLIDE 4: EDA + 6 hipótesis -->
+    <section>
+      <p class="kicker">Análisis exploratorio</p>
+      <h2>6 hipótesis de negocio — qué encontramos</h2>
+      <table>
+        <thead>
+          <tr><th>#</th><th>Hipótesis</th><th>Resultado</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>H1</td><td>Tenure bajo → churn</td><td><span class="badge green">Confirmada</span> 3.4m churn vs 11.5m activos</td></tr>
+          <tr><td>H2</td><td>Complain → churn</td><td><span class="badge amber">Confirmada con ⚠ leakage</span></td></tr>
+          <tr><td>H3</td><td>Inactividad → churn</td><td><span class="badge red">REFUTADA</span> relación invertida</td></tr>
+          <tr><td>H4</td><td>Baja satisfacción → churn</td><td><span class="badge amber">CONTRAINTUITIVA</span> score más alto en churners</td></tr>
+          <tr><td>H5</td><td>Bajo cashback → churn</td><td><span class="badge green">Confirmada</span> $160 vs $181</td></tr>
+          <tr><td>H6</td><td>Single → churn</td><td><span class="badge green">Confirmada</span> 26.7% vs 11.5% Married</td></tr>
+        </tbody>
+      </table>
+      <p class="small">Lo más interesante son <strong>H3 y H4</strong>: hipótesis que parecían obvias pero los datos las cuestionaron. Investigamos por qué.</p>
+      <aside class="notes">
+        4 de 6 confirmadas. Pero las 2 que NO se confirmaron (H3 y H4) terminaron siendo las que más aprendimos.
+        Importante: no acepté el resultado contraintuitivo. Investigué por qué.
+      </aside>
+    </section>
+
+    <!-- SLIDE 5: H3/H4 investigación -->
+    <section>
+      <p class="kicker">Cuestionar al modelo</p>
+      <h2>H3: la inactividad NO predice churn (¿por qué?)</h2>
+      <img src="./01b_h3_investigacion.png" alt="Investigación H3">
+      <p class="small">
+        <strong>La inversión es real pero engañosa.</strong> Los clientes nuevos (Q1 de Tenure) churnean al 50%
+        y por construcción tienen <em>pocos días sin comprar</em>. Al mezclar todos los tenures, la mediana del grupo
+        churneado se inclina hacia "compra reciente" — pero no es la recencia lo que predice, es <strong>Tenure + interacción con Complain</strong>.
+      </p>
+      <aside class="notes">
+        Esto es lo más fuerte de la defensa: no acepté un resultado raro, investigué.
+        Demuestra entendimiento del dato. La regla histórica "email a 15 días" no se sostiene — confirmado.
+      </aside>
+    </section>
+
+    <!-- SLIDE 6: Feature engineering -->
+    <section>
+      <p class="kicker">Feature engineering</p>
+      <h2>7 candidatas evaluadas, 2 adoptadas</h2>
+      <img src="./02b_fe_rf_benchmark.png" alt="Benchmark FE">
+      <p class="small">
+        <strong>Criterio escrito ANTES de ver resultados:</strong> MI ≥ 0.005 + redundancia ≤ 0.85 + lift en CV.
+        Solo <code>OrdersPerMonth</code> y <code>CashbackPerMonth</code> pasaron las 3 puertas.
+      </p>
+      <p class="small">
+        <span class="green">Hallazgo retrospectivo:</span> estas 2 features quedaron <strong>#1 y #3</strong> en feature importance del modelo final.
+        El protocolo de exploración funcionó.
+      </p>
+      <aside class="notes">
+        No agregué features porque sí. Las testée con criterio empírico. 5 fueron descartadas con evidencia.
+        Esto es la disciplina que la rúbrica valora: validar, no aceptar a ciegas.
+      </aside>
+    </section>
+
+    <!-- SLIDE 7: Pipeline anti-leakage -->
+    <section>
+      <p class="kicker">Disciplina anti-leakage</p>
+      <h2>Pipeline: todo se fittea en train, se aplica a test</h2>
+      <div class="pipeline">
+        raw CSV<br>
+        &nbsp;&nbsp;↓ <strong>clean_categories</strong> (sin estadísticas)<br>
+        &nbsp;&nbsp;↓ <strong>split estratificado</strong> (test_size=0.2, random_state=42)<br>
+        &nbsp;&nbsp;↓ <strong>impute medianas</strong> (fit-on-train ← <span class="accent">crítico</span>)<br>
+        &nbsp;&nbsp;↓ <strong>cap outliers p99</strong> (fit-on-train)<br>
+        &nbsp;&nbsp;↓ <strong>add_features</strong> (row-wise, sin estadísticas)<br>
+        &nbsp;&nbsp;↓ <strong>OneHotEncoder</strong> (fit-on-train)<br>
+        &nbsp;&nbsp;↓<br>
+        4 CSVs procesados — modelo final consume <strong>sin_complain</strong>
+      </div>
+      <p class="small">
+        <strong>Auditoría de la variable Complain:</strong> no podemos confirmar si la queja se registra antes o después del churn.
+        Postura conservadora: <span class="accent">dropeamos Complain del modelo final</span>. Audit cuantitativo: gap de Recall solo +0.79%, no compensa el riesgo.
+      </p>
+      <aside class="notes">
+        Acá hablo de leakage como concepto. El que pregunte, le explico: "imaginate estudiar con las respuestas del examen — funciona en el lab, falla en producción."
+        La decisión sobre Complain es defendible: lo evaluamos empíricamente y el gap chico no justifica el riesgo.
+      </aside>
+    </section>
+
+    <!-- SLIDE 8: Comparación de modelos -->
+    <section>
+      <p class="kicker">Cuál modelo elegir</p>
+      <h2>Comparación en CV (5-fold estratificado)</h2>
+      <img src="./03_cv_inicial.png" alt="CV inicial">
+      <table>
+        <thead><tr><th>Modelo</th><th>Recall CV</th><th>Notas</th></tr></thead>
+        <tbody>
+          <tr><td>DummyClassifier</td><td>0.0000</td><td>Predice siempre "no churn" — accuracy 83%, Recall 0%</td></tr>
+          <tr><td>DecisionTree</td><td>0.7652</td><td>Interpretable pero 8 pts por debajo</td></tr>
+          <tr><td><strong>RandomForest</strong></td><td><strong>0.8431</strong></td><td>Ganador — mejor Recall + menor varianza</td></tr>
+          <tr><td>XGBoost</td><td>0.8338</td><td>Cerca pero mayor varianza entre folds</td></tr>
+        </tbody>
+      </table>
+      <aside class="notes">
+        Comparo 4 modelos. El Dummy demuestra que accuracy engaña. RandomForest gana por Recall y por estabilidad (menos std entre folds).
+        Decision Tree es el obligatorio per rúbrica — lo incluí pero quedó por detrás.
+      </aside>
+    </section>
+
+    <!-- SLIDE 9: Tuning iterativo -->
+    <section>
+      <p class="kicker">No me conformé con la primera respuesta</p>
+      <h2>Tuneo iterativo — 3 rondas</h2>
+      <table>
+        <thead><tr><th>Ronda</th><th>n_iter</th><th>Resultado RF</th><th>Por qué seguí</th></tr></thead>
+        <tbody>
+          <tr><td>Original</td><td>30</td><td>+1.88% (debajo del 2%)</td><td>Auditoría: 3/4 best_params <strong>pegados a boundaries</strong></td></tr>
+          <tr><td>V1 expanded</td><td>100</td><td>+2.34% (✅ supera 2%)</td><td>Pero XGB con config sospechosa (n_est=50 al piso)</td></tr>
+          <tr><td>V2 narrow</td><td>50</td><td>+2.19% (estable)</td><td>Confirma V1, XGB se estabilizó. Plateau en iter 27 ✅</td></tr>
+        </tbody>
+      </table>
+      <br>
+      <h3>¿Y el overfitting?</h3>
+      <p>Medí gap train-CV de <strong>todas</strong> las configs:</p>
+      <table>
+        <thead><tr><th>Config</th><th>Recall CV</th><th>Gap train-CV</th></tr></thead>
+        <tbody>
+          <tr><td>RF default</td><td>0.8431</td><td>+0.1569</td></tr>
+          <tr><td><strong>RF V1 tuneado</strong></td><td><strong>0.8629</strong></td><td><strong>+0.1371</strong> ← mejor</td></tr>
+        </tbody>
+      </table>
+      <p class="small"><strong>Todos los tuneados overfittean MENOS que los defaults.</strong> El miedo a max_depth alto no se materializó — el ensemble compensa.</p>
+      <aside class="notes">
+        Esta es LA slide más fuerte de la defensa. La iteración demuestra entendimiento.
+        Si me preguntan "por qué iteraste 3 veces", respuesta: "porque no se puede concluir 'tuning no sirve' si los best_params están en los límites del search space."
+      </aside>
+    </section>
+
+    <!-- SLIDE 10: Por qué Recall -->
+    <section>
+      <p class="kicker">La métrica</p>
+      <h2>Por qué Recall (y no Accuracy)</h2>
+      <div class="twocol">
+        <div>
+          <h3>El problema</h3>
+          <p>Class imbalance: <span class="accent">83/17</span>. Un modelo que diga "nadie churna" tiene <span class="accent">83% accuracy</span>... y detecta cero churners.</p>
+          <p class="small">Accuracy en problemas desbalanceados <strong>miente</strong>: hace sentir genio mientras el modelo es inútil.</p>
+        </div>
+        <div>
+          <h3>El costo asimétrico</h3>
+          <p>Perder un churner = costo de adquirir uno nuevo (<span class="accent">5-7×</span> más caro).</p>
+          <p>Falsa alarma = un email innecesario o un cupón a alguien que no lo necesitaba.</p>
+          <p class="small">Costo de FN ≫ Costo de FP.</p>
+        </div>
+      </div>
+      <br>
+      <blockquote>
+        <strong>Decisión:</strong> optimizar Recall (de los que se van, ¿a cuántos detectamos?) aunque baje Precision (de los que predijimos churn, ¿cuántos eran reales?).
+      </blockquote>
+      <aside class="notes">
+        Este punto es central a la defensa oral según la rúbrica.
+        Analogía para el gerente: "es como el radar de un hospital. Querés no perderte ningún caso de cáncer, aunque a veces saltes con alguno que no era."
+      </aside>
+    </section>
+
+    <!-- SLIDE 11: Performance -->
+    <section>
+      <p class="kicker">Performance final en test</p>
+      <h2>Detecta 95 de cada 100 churners</h2>
+      <div class="twocol">
+        <div>
+          <img src="./03_pr_curves.png" alt="PR + ROC curves" style="max-height: 380px">
+        </div>
+        <div style="text-align: left">
+          <table>
+            <thead><tr><th>Métrica</th><th>Valor</th></tr></thead>
+            <tbody>
+              <tr><td><strong>Recall</strong></td><td><span class="green" style="font-size: 1.3em">95.3%</span></td></tr>
+              <tr><td>Precision</td><td>81.2%</td></tr>
+              <tr><td>F1</td><td>87.6%</td></tr>
+              <tr><td>PR-AUC</td><td>0.961</td></tr>
+              <tr><td>AUC-ROC</td><td>0.992</td></tr>
+            </tbody>
+          </table>
+          <p class="small">
+            <strong>En negocio:</strong><br>
+            Sobre 190 churners reales en el test set, el modelo detectó <span class="green"><strong>181</strong></span>.<br>
+            De cada 10 alertas, <strong>8 son reales</strong>.
+          </p>
+        </div>
+      </div>
+      <aside class="notes">
+        Performance excelente. Traducción al gerente: "detectamos a 95 de cada 100 que se van — con tiempo para intervenir."
+        Si me preguntan por el trade-off Recall vs Precision, respondo: "es deliberado, alineado con el costo asimétrico de la decisión #1."
+      </aside>
+    </section>
+
+    <!-- SLIDE 12: Insights -->
+    <section>
+      <p class="kicker">Qué predice churn</p>
+      <h2>Drivers de negocio — 4 hallazgos accionables</h2>
+      <div class="twocol">
+        <div>
+          <img src="./03_shap_summary.png" alt="SHAP summary" style="max-height: 400px">
+        </div>
+        <div style="text-align: left">
+          <p><strong>1. La tasa mensual de actividad relativa a la antigüedad</strong> es el predictor más fuerte (#1 y #3 en importance).</p>
+          <p><strong>2. Los primeros 3 meses</strong> concentran el riesgo (~50% churn vs <10% en clientes viejos).</p>
+          <p><strong>3. La regla "email a 15 días sin compra" NO se sostiene</strong> — el verdadero patrón es "compra reciente + queja sin resolver".</p>
+          <p><strong>4. La satisfacción auto-reportada NO predice churn</strong> — score más alto en churners (3.4 vs 3.0).</p>
+        </div>
+      </div>
+      <aside class="notes">
+        Los 4 hallazgos del reporte ejecutivo. Resalto los 2 contraintuitivos (15 días + satisfacción) — son los que invalidan creencias del equipo comercial y demuestran que el análisis fue real.
+      </aside>
+    </section>
+
+    <!-- SLIDE 13: Recomendaciones -->
+    <section>
+      <p class="kicker">Acciones para el equipo comercial</p>
+      <h2>4 recomendaciones priorizadas</h2>
+      <table style="font-size: 0.6em">
+        <thead><tr><th>Acción</th><th>Plazo</th><th>Responsable</th><th>Impacto medible</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>A. Reorientar campañas</strong> hacia tasa mensual de actividad</td>
+            <td>30 días</td>
+            <td>Marketing Retención</td>
+            <td>≥85% Recall en alertas</td>
+          </tr>
+          <tr>
+            <td><strong>B. Atención one-on-one</strong> para nuevos (≤3m) con queja</td>
+            <td>Inmediato</td>
+            <td>Customer Success</td>
+            <td>Reducir churn de 39% a 25%</td>
+          </tr>
+          <tr>
+            <td><strong>C. Programa onboarding 90 días</strong> estructurado</td>
+            <td>90 días</td>
+            <td>CS + Producto</td>
+            <td>Reducir churn de nuevos de 50% a 30%</td>
+          </tr>
+          <tr>
+            <td><strong>D. Dejar de usar score de satisfacción</strong> como gatillo</td>
+            <td>30 días</td>
+            <td>Analytics</td>
+            <td>Ahorro de campañas mal dirigidas</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="small">Verbo + objeto + impacto + responsable + plazo. Nada genérico, nada de "mejorar la experiencia del cliente".</p>
+      <aside class="notes">
+        Cada recomendación cumple: verbo + objeto + impacto medible. Esto es lo que la rúbrica valora: accionable, no aspiracional.
+        Las acciones B y C son las que tienen mayor ROI esperado.
+      </aside>
+    </section>
+
+    <!-- SLIDE 14: Limitaciones + Q&A -->
+    <section>
+      <p class="kicker">Honestidad</p>
+      <h2>Limitaciones + próximos pasos</h2>
+      <h3>Lo que el modelo NO puede</h3>
+      <ul class="small">
+        <li>Confirmar el timing de la variable <code>Complain</code> (dataset público, no hay equipo de datos accesible)</li>
+        <li>Generalizar a perfiles de clientes muy distintos a los del training set (re-entrenar trimestralmente)</li>
+        <li>Probar causalidad — solo identifica patrones (validar con A/B testing antes de escalar)</li>
+        <li>Test set fue evaluado dos veces (defaults + V1 tuneado) — limitación declarada</li>
+      </ul>
+      <h3>Próximos pasos</h3>
+      <ul class="small">
+        <li>Validar timing de Complain con el equipo de datos (semana 1)</li>
+        <li>A/B testing de las acciones B y C (30-90 días)</li>
+        <li>Re-entrenar trimestralmente con datos frescos</li>
+        <li>Exploración profunda del segmento Single (26.7% churn)</li>
+      </ul>
+      <br>
+      <h2 style="text-align: center; margin-top: 30px">¿Preguntas?</h2>
+      <p class="footnote" style="text-align: center">
+        Material complementario disponible en el repo: <code>github.com/tattas21/churn_tp</code><br>
+        Notebooks, decisiones documentadas, reporte ejecutivo PDF.
+      </p>
+      <aside class="notes">
+        Limitaciones honestas. Lo importante: no minimizo, las nombro como lo que son.
+        Sobre el Complain timing: "si el equipo de datos puede confirmarlo, recuperamos ~1% adicional de Recall."
+        Cierro con Q&A. Tengo decisions.md para defender cualquier pregunta puntual.
+      </aside>
+    </section>
+
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+<script>
+  Reveal.initialize({
+    hash: true,
+    slideNumber: 'c/t',
+    controls: true,
+    progress: true,
+    transition: 'fade',
+    plugins: [ RevealNotes, RevealHighlight ]
+  });
+</script>
+</body>
+</html>
