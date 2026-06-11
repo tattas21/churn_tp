@@ -158,3 +158,44 @@ Registro de cada decisión importante del proyecto.
    - Adoptar las 7 candidatas en bloque por el lift agregado (+0.0159) — la diferencia respecto al shortlist de 2 features cae dentro del std del benchmark (~0.025) y no compensa la complejidad.
    - Forzar la inclusión de las interacciones pre-computadas "por interpretabilidad" — pierde validez si el modelo final tiene peor performance.
 4. **Consecuencias:** El feature set adoptado en el pipeline es 34 + 2 = 36 columnas, sin las interacciones explícitas. La regla de negocio "email a 15 días sin compra" queda formalmente retirada. `SatisfactionScore` permanece como ordinal sin binarizar.
+
+---
+
+## Decisión — Random Forest como familia ganadora
+
+> **Nota:** esta decisión define la **familia** del modelo (RF vs DT vs XGB). La **configuración exacta** dentro de RF (defaults vs tuneado) se resuelve en la decisión siguiente tras una iteración del tuning.
+
+1. **Qué decidí:** Adoptar la familia **`RandomForestClassifier`** como modelo de producción para predecir churn, en lugar de Decision Tree o XGBoost.
+2. **Por qué:** Random Forest tuvo el mejor Recall en cross-validation (0.8431 ± 0.032 en defaults) — la métrica que la consigna establece como primaria por el costo asimétrico de perder un churner. XGBoost quedó muy cerca (0.8338) pero con mayor varianza entre folds (std 0.043 vs 0.032), y perdió también el desempate por PR-AUC (0.9094 vs 0.9011). El Decision Tree, aunque obligatorio per rúbrica y útil para interpretar reglas, quedó 8 puntos por debajo (0.7652). RF combina lo mejor de ambos: captura interacciones nativamente (como confirma el análisis de feature engineering en `02b`) y promedia varianza con su naturaleza de ensemble — exactamente lo que un dataset desbalanceado y con interacciones (DSL × Complain × Tenure documentadas en `01b`) necesita.
+3. **Alternativas que descarté:**
+   - **XGBoost (familia)**: el contendiente más cercano (Recall 0.8338), descartado por mayor varianza entre folds y peor PR-AUC. Quedó como segunda opción en caso de que RF mostrara problemas.
+   - **Decision Tree**: descartado por performance — sirve para visualización pero su Recall es 8 puntos inferior. Hubiera ganado si la rúbrica priorizara interpretabilidad sobre detección.
+   - **Logistic Regression**: no entró en la comparación porque tras el feature engineering del notebook `02b` el modelo se beneficia de capturar interacciones (DSL × Complain × Tenure), algo que un modelo lineal no captura sin pre-computar todas las interacciones manualmente.
+4. **Consecuencias:** La familia queda fijada en RF. La configuración exacta dentro de RF (defaults vs tuneado) se decide en la siguiente entrada tras un análisis iterativo del tuning. Las dos features adoptadas en la decisión previa (`CashbackPerMonth`, `OrdersPerMonth`) quedaron #1 y #3 en feature importance, validando retrospectivamente el trabajo de FE.
+
+---
+
+## Decisión — Adopción final de Random Forest V1 tuneado tras iteración del tuning
+
+> **Nota:** esta decisión REVISA la conclusión inicial del tuning (sección 8 del notebook). La decisión vigente es la siguiente.
+
+1. **Qué decidí:** Adoptar **Random Forest V1 tuneado** (`n_estimators=1469, max_depth=50, min_samples_leaf=3, max_features=0.978, class_weight='balanced'`) como modelo final, tras una auditoría iterativa que reveló que la primera ronda de tuning estaba artificialmente limitada por search spaces demasiado estrechos.
+2. **Por qué:** La decisión inicial era "no tunear" porque ambos modelos quedaron debajo del 2% threshold (RF +1.88%, XGB +1.58%). Pero una auditoría post-mortem mostró que **3/4 de los best_params de RF estaban pegados a los límites del search space original** — el optimizer quería ir más allá pero no podía. Re-corriendo con ranges expandidos (n_iter=100) RF cruzó el 2% (+2.34%), y una tercera ronda con ranges narrow targeteados (n_iter=50) confirmó el resultado (plateau en iter 27). Análisis de overfitting: **el RF V1 tuneado overfittea MENOS que el default** (gap train-CV 0.1371 vs 0.1569). En test set el ganador detecta **181 de 190 churners reales (Recall 95.3%, +0.0105 vs default)**, con costo de 42 falsos positivos vs 16 — trade-off alineado con el costo asimétrico documentado en la decisión #1 (perder un churner cuesta mucho más que un email innecesario).
+3. **Alternativas que descarté:**
+   - **Mantener defaults** (decisión original): rechazada porque el análisis de boundaries reveló que la conclusión "tuning no sirve" estaba sesgada por search spaces inadecuados. Adoptar el tuneado correcto es la conclusión defendible con los datos en mano.
+   - **Adoptar RF V2** (n_iter=50 narrow, Recall CV 0.8615): muy cercano a V1 (0.8629) pero `max_depth=99` es más agresivo sin ganancia. V1 con `max_depth=50` da el mismo resultado con configuración más conservadora.
+   - **Adoptar XGBoost V2 tuneado** (Recall CV 0.8562): config más "típica" de XGB, pero Recall menor que RF V1. Perdió en la métrica primaria.
+   - **No re-evaluar en test set** para mantener la regla "una sola evaluación": rechazado porque adoptar un modelo sin validar en test es peor higiene que documentar transparentemente la segunda evaluación.
+4. **Consecuencias:** El modelo serializado vive en `models/RandomForest_V1_winner.pkl` (gitignored). El script `src/models/train.py` está actualizado a la config V1. El test set quedó **evaluado dos veces** (defaults + V1) — declarado como limitación en `notebook 03` sección 20. Recomendación a futuro: si el modelo se mueve a producción a largo plazo, definir un nuevo holdout 100% intocado para validación. Trade-off explícito: el modelo V1 sube Recall +1.05 pp pero baja Precision −10.62 pp respecto a defaults — alineado con el costo asimétrico declarado en la decisión #1, pero requiere comunicación clara al equipo comercial sobre el aumento de falsas alarmas (42 vs 16 sobre 936 clientes activos).
+
+---
+
+## Decisión — Drop definitivo de `Complain` por riesgo de leakage no validable
+
+1. **Qué decidí:** **Eliminar `Complain` del modelo en producción**, cerrando la decisión previa "Dos versiones de la base" que la dejaba pendiente de validación.
+2. **Por qué:** El dataset es público (E_Commerce_Dataset.csv de Kaggle) y no podemos consultar al sistema fuente para confirmar si la queja se registra antes o después de que el cliente decide irse. El audit cuantitativo realizado en `notebooks/03_Modeling_Churn.ipynb` (sección 14) re-entrenó el ganador sobre `con_complain.csv` y midió el lift: **Recall sube solo 0.79%** (de 0.8431 a 0.8509). Una mejora tan modesta no justifica el riesgo de que el modelo se entrene con información que en producción no estaría disponible al momento de la predicción. La postura conservadora documentada en la consigna (pag. 8 "ojo con el leakage") prevalece sobre el beneficio marginal.
+3. **Alternativas que descarté:**
+   - **Mantener Complain en el modelo** apostando a que el lift de 0.79% vale el riesgo: rechazado porque sin validación del timing puede invalidar todo el modelo en producción.
+   - **Validar con el equipo de datos** y decidir después: imposible — no hay equipo de datos accesible para un dataset público.
+   - **Usar Complain solo para análisis exploratorio**, no para predicción: ya cubierto — el EDA (`01`) y el análisis de interacciones (`01b`) la usan; solo se la excluye del modelo de inferencia.
+4. **Consecuencias:** El pipeline de modelado consume exclusivamente `*_sin_complain.csv` (36 features). Los CSVs `*_con_complain.csv` se mantienen en `data/processed/` para reproducibilidad del audit y por si en el futuro se confirma el timing de la variable. Si eso sucede, agregar Complain al pipeline es trivial — los notebooks ya tienen el código de re-entrenamiento.
