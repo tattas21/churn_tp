@@ -93,7 +93,9 @@ El balance entre "detectar a todos los que se van" (Recall) y "no molestar a qui
 
 ## 4. Recomendación accionable
 
-Cuatro acciones priorizadas por impacto esperado:
+Cuatro acciones priorizadas por impacto esperado.
+
+> **Nota sobre los números de impacto:** los porcentajes "base" (39% en el segmento con queja, ~50% en clientes nuevos) son **observados en los datos históricos** del análisis. Los porcentajes "objetivo" (25%, 30%) son **targets aspiracionales para definir con el equipo comercial**, no proyecciones del modelo. El impacto real de cada intervención debe validarse con A/B testing antes de comprometerse a la cifra.
 
 **A. Reorientar campañas de retención desde "días sin compra" hacia "tasa mensual de actividad"** para aumentar la detección temprana de clientes en riesgo real.
 
